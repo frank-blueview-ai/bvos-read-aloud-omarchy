@@ -47,14 +47,35 @@ Window {
         function onShowCard() { card.show() }
     }
 
+    component CardTip: ToolTip {
+        id: tip
+        delay: 650
+        timeout: 3200
+        padding: 6
+        width: Math.min(implicitWidth, 224)
+        popupType: Popup.Window
+
+        contentItem: Text {
+            text: tip.text
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: card.muted
+            font.pixelSize: 11
+        }
+        background: Rectangle {
+            radius: Math.min(card.cornerRadius, 8)
+            color: reader.dark ? "#172131" : "#f4f7fb"
+            border.color: reader.dark ? "#29374b" : "#dbe3ee"
+        }
+    }
+
     component PlayerButton: Button {
         id: control
         required property string label
         required property string symbol
         property bool primary: false
         Accessible.name: label
-        ToolTip.visible: hovered
-        ToolTip.text: label
+        CardTip { visible: control.hovered; text: control.label }
         Layout.preferredWidth: 28
         Layout.preferredHeight: 28
         padding: 0
@@ -145,9 +166,7 @@ Window {
                 padding: 0
                 focusPolicy: Qt.NoFocus
                 Accessible.name: qsTr("Visit Blue View")
-                ToolTip.visible: hovered
-                ToolTip.delay: 450
-                ToolTip.text: Accessible.name
+                CardTip { visible: brandButton.hovered; text: brandButton.Accessible.name }
                 background: null
                 contentItem: Image {
                     fillMode: Image.PreserveAspectFit
@@ -172,8 +191,7 @@ Window {
                 padding: 0
                 focusPolicy: Qt.NoFocus
                 Accessible.name: reader.wantsPlayback ? qsTr("Pause") : qsTr("Play")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
+                CardTip { visible: waveformButton.hovered; text: waveformButton.Accessible.name }
                 onClicked: reader.toggle()
                 background: Rectangle {
                     radius: width / 2
@@ -241,8 +259,7 @@ Window {
                 padding: 0
                 focusPolicy: Qt.NoFocus
                 Accessible.name: qsTr("Window opacity")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
+                CardTip { visible: opacityButton.hovered; text: opacityButton.Accessible.name }
                 contentItem: Text {
                     text: "◐"
                     color: opacityButton.hovered ? card.ink : card.muted
@@ -266,8 +283,7 @@ Window {
                 padding: 0
                 focusPolicy: Qt.NoFocus
                 Accessible.name: qsTr("Close Read Aloud")
-                ToolTip.visible: hovered
-                ToolTip.text: Accessible.name
+                CardTip { visible: closeButton.hovered; text: closeButton.Accessible.name }
                 contentItem: Text {
                     text: "×"
                     color: closeButton.hovered ? card.ink : card.muted
@@ -312,14 +328,14 @@ Window {
             visible: card.expanded
 
             Text {
+                id: statusLabel
                 Layout.fillWidth: true
                 text: reader.status
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
                 color: card.muted
                 font.pixelSize: 11
-                ToolTip.visible: statusHover.hovered && truncated
-                ToolTip.text: reader.status
+                CardTip { visible: statusHover.hovered && statusLabel.truncated; text: reader.status }
                 HoverHandler { id: statusHover }
             }
 
