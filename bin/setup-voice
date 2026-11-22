@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+voice_dir="${XDG_DATA_HOME:-$HOME/.local/share}/omarchy-read-aloud/speech"
+release=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1
+
+for command in uv curl flock; do
+    if ! command -v "$command" >/dev/null; then
+        printf 'Install %s before setting up the Kokoro voice.\n' "$command" >&2
+        exit 1
+    fi
+done
+
+mkdir -p -- "$voice_dir"
+exec 9>"$voice_dir/setup.lock"
+flock 9
+
+download_model() {
+    local name=$1 digest=$2 destination temporary
+    destination="$voice_dir/$name"
+    if printf '%s  %s\n' "$digest" "$destination" | sha256sum --check --status; then
+        return
+    fi
+
+    temporary="$destination.download"
+    curl --proto '=https' --proto-redir '=https' --fail --location --retry 2 \
+        --output "$temporary" "$release/$name"
+    if ! printf '%s  %s\n' "$digest" "$temporary" | sha256sum --check --status; then
+        printf 'Checksum mismatch for %s.\n' "$name" >&2
+        exit 1
+    fi
+    mv -- "$temporary" "$destination"
+}
+
+download_model kokoro-v1.0.onnx beb0d1848dee9a49da392cc3df26958d46cfa35d321edf434f52949153f0df3a
+download_model voices-v1.0.bin bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d
+
+if [[ ! -x "$voice_dir/venv/bin/python" ]]; then
+    uv venv --python 3.13 "$voice_dir/venv"
+fi
+uv pip install --python "$voice_dir/venv/bin/python" 'kokoro-onnx==0.6.1' 'langid==1.1.6'
+install -m 644 "$root/speech/read-aloud.py" "$voice_dir/read-aloud.py"
+printf 'Kokoro is ready for BvOs Read Aloud.\n'

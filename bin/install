@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+config=${XDG_CONFIG_HOME:-"$HOME/.config"}
+bindings="$config/hypr/bindings.lua"
+begin='-- Begin Blue View Read Aloud'
+end='-- End Blue View Read Aloud'
+
+test -f "$bindings"
+current=$(hyprctl -j binds)
+if jq -e 'any(.[];
+    (.description | IN("Read selected text", "Read copied text", "Start or resume reading",
+                      "Pause reading", "Previous spoken sentence", "Next spoken sentence") | not)
+    and (((.modmask == 65 or .modmask == 72) and (.key | ascii_downcase) == "r")
+         or (.modmask == 4 and (.key | ascii_downcase | IN("up", "down", "left", "right")))))' \
+    <<< "$current" >/dev/null; then
+    echo 'A Read Aloud shortcut is already assigned. Free the shortcut before installing.' >&2
+    exit 1
+fi
+
+"$root/bin/build"
+install -Dm755 "$root/build/omarchy-read-aloud" "$HOME/.local/bin/omarchy-read-aloud"
+install -Dm644 "$root/omarchy-read-aloud.desktop" "${XDG_DATA_HOME:-"$HOME/.local/share"}/applications/omarchy-read-aloud.desktop"
+install -Dm644 "$root/assets/double-oval.svg" "${XDG_DATA_HOME:-"$HOME/.local/share"}/icons/hicolor/scalable/apps/omarchy-read-aloud.svg"
+install -Dm644 "$root/hyprland.lua" "$config/hypr/read-aloud.lua"
+load='dofile((os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/hypr/read-aloud.lua")'
+
+if ! grep -Fxq -- "$load" "$bindings"; then
+    cp -p -- "$bindings" "$bindings.bak-read-aloud.$(date +%s)"
+    staged=$(mktemp "$bindings.XXXXXX")
+    trap 'rm -f -- "$staged"' EXIT
+    chmod --reference="$bindings" "$staged"
+    awk -v begin="$begin" -v end="$end" '
+        $0 == begin { managed = 1; next }
+        $0 == end { managed = 0; next }
+        !managed { print }
+    ' "$bindings" > "$staged"
+    printf '\n%s\n%s\n%s\n' "$begin" "$load" "$end" >> "$staged"
+    mv -- "$staged" "$bindings"
+fi
+
+hyprctl reload
+errors=$(hyprctl configerrors)
+if [[ -n $errors ]]; then
+    printf '%s\n' "$errors" >&2
+    exit 1
+fi

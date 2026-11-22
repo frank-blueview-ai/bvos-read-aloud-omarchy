@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+mkdir -p "$root/build"
+cd "$root/build"
+qmake6 "$root/read-aloud.pro"
+make -j"${READ_ALOUD_BUILD_JOBS:-4}"

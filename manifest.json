@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "blueview.read-aloud",
+  "name": "BvOs Intelligence Read Aloud",
+  "version": "0.2.0",
+  "author": "Blue View",
+  "license": "MIT",
+  "description": "Read selected or copied text using the local Kokoro speech engine.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "BvOs Intelligence Read Aloud",
+    "category": "Accessibility",
+    "defaultSection": "right",
+    "allowMultiple": false
+  }
+}

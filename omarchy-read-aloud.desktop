@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=BvOs Intelligence Read Aloud
+Comment=Read selected or copied text using Blue View’s local Kokoro model
+Exec=omarchy-read-aloud
+Icon=omarchy-read-aloud
+Terminal=false
+Categories=Accessibility;Utility;

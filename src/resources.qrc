@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>Player.qml</file>
+        <file alias="double-oval.svg">../assets/double-oval.svg</file>
+    </qresource>
+</RCC>
