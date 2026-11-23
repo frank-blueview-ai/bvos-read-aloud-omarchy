@@ -5,6 +5,7 @@
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDir>
+#include <QDeadlineTimer>
 #include <QFileInfo>
 #include <QColor>
 #include <QGuiApplication>
@@ -44,29 +45,30 @@ QString voiceDirectory() {
     return hasVoice(shared) ? shared : data + "/omarchy-read-aloud/speech";
 }
 
-QString pasteText(bool primary, const QString &mime) {
-    QStringList args{"--no-newline", "--type", mime};
+QStringList clipboardWatchArgs(bool primary) {
+    QStringList args{"--type", "text"};
     if (primary)
         args << "--primary";
-    QProcess paste;
-    paste.start("wl-paste", args);
-    if (!paste.waitForFinished(1000)) {
-        if (paste.state() != QProcess::NotRunning) {
-            paste.kill();
-            paste.waitForFinished();
-        }
-        return {};
-    }
-    return paste.exitCode() == 0 ? QString::fromUtf8(paste.readAllStandardOutput()) : QString();
+    // wl-paste supplies the state and text from the same clipboard offer.
+    return args << "--watch" << "sh" << "-c"
+        << R"(if [ "$CLIPBOARD_STATE" = data ]; then head -c 256001 | base64 -w0; fi; printf '\n')";
 }
 
 QString clipboard(bool primary) {
-    for (const QString &mime : {QString("text/plain;charset=utf-8"), QString("text/plain"), QString("UTF8_STRING")}) {
-        const QString text = pasteText(primary, mime);
-        if (!text.isEmpty())
-            return text;
+    QProcess paste;
+    const QDeadlineTimer deadline(1000);
+    paste.start("wl-paste", clipboardWatchArgs(primary));
+    while (!paste.canReadLine()) {
+        const int remaining = deadline.remainingTime();
+        if (remaining == 0 || !paste.waitForReadyRead(remaining))
+            break;
     }
-    return {};
+    const QByteArray frame = paste.canReadLine() ? paste.readLine().trimmed() : QByteArray();
+    if (paste.state() != QProcess::NotRunning) {
+        paste.kill();
+        paste.waitForFinished();
+    }
+    return QString::fromUtf8(QByteArray::fromBase64(frame)).left(maxText + 1);
 }
 }
 
@@ -148,8 +150,7 @@ public:
     }
 
     void watchClipboard() {
-        clipboardWatcher.start("wl-paste", {"--type", "text/plain", "--watch", "sh", "-c",
-            R"(if [ "$CLIPBOARD_STATE" = data ]; then head -c 256001 | base64 -w0; printf '\n'; fi)"});
+        clipboardWatcher.start("wl-paste", clipboardWatchArgs(false));
     }
 
     ~Reader() override {
@@ -288,15 +289,19 @@ public slots:
         return true;
     }
 
-    void Start(const QString &copied, const QString &selected) {
+    void Start() {
+        if (paused() || editedPreview) {
+            Control("start");
+            return;
+        }
+        const QString copied = clipboard(false);
+        const QString selected = clipboard(true);
         const bool newCopy = !copied.trimmed().isEmpty() && copied != lastCopy;
         const bool newSelection = !selected.trimmed().isEmpty() && selected != lastSelection;
         lastCopy = copied;
         lastSelection = selected;
         if (newCopy)
             Read(copied);
-        else if (editedPreview)
-            Control("start");
         else if (awaitingCopyStart && playable() && previewText == copied.trimmed())
             Control("start");
         else if (newSelection)
@@ -539,10 +544,16 @@ int main(int argc, char **argv) {
         }
         return 0;
     }
-    const QString copied = clipboard(false).left(maxText + 1);
-    const QString selected = args.contains("--clipboard") ? QString() : clipboard(true).left(maxText + 1);
+    QDBusInterface running(service, path, service, bus);
+    if (start && running.isValid()) {
+        const QDBusReply<void> result = running.call("Start");
+        return result.isValid() ? 0 : 1;
+    }
+    const bool explicitText = args.size() == 3 && args.at(1) == "--text";
+    const QString copied = explicitText ? QString() : clipboard(false);
+    const QString selected = explicitText || args.contains("--clipboard") ? QString() : clipboard(true);
     QString text = !selected.trimmed().isEmpty() ? selected : copied;
-    if (args.size() == 3 && args.at(1) == "--text")
+    if (explicitText)
         text = args.at(2);
     else if (start && !copied.trimmed().isEmpty())
         text = copied;
@@ -551,9 +562,9 @@ int main(int argc, char **argv) {
     if (bus.isConnected()) {
         bus.registerObject(path, &reader, QDBusConnection::ExportAllSlots);
         if (!bus.registerService(service)) {
-            QDBusInterface running(service, path, service, bus);
-            const QDBusReply<void> result = start ? running.call("Start", copied, selected)
-                                                 : running.call("Read", text);
+            QDBusInterface existing(service, path, service, bus);
+            const QDBusReply<void> result = start ? existing.call("Start")
+                                                 : existing.call("Read", text);
             return result.isValid() ? 0 : 1;
         }
     }
