@@ -16,29 +16,31 @@ Read selected or copied text on Omarchy using the local Kokoro speech engine. A 
 
 ## Install
 
-On opening, Ctrl+Up prefers copied text when both a copy and a selection are available. While the card is open, a new plain-text copy replaces the passage and resets playback to the beginning. The preview renders Markdown headings, lists, links, emphasis, and code, and follows the highlighted sentence during playback. Choose Edit to change the source, then press Ctrl+Up to read the edited passage. The speech engine skips code and formatting symbols. Edits stay in the player. Ctrl+Down, Ctrl+Left, and Ctrl+Right are captured only while the playback card is open. Ctrl+Up is the global start shortcut.
-
-On Omarchy Quattro with a Lua-based Hyprland configuration, install the player build dependencies:
+On Omarchy Quattro with Lua-based Hyprland, add the bar widget from the [Omarchy Marketplace](https://plugins.omarchy.org/plugin.html?id=blueview.read-aloud) or run:
 
 ```sh
-sudo pacman -S --needed base-devel qt6-base qt6-declarative qt6-multimedia qt6-multimedia-ffmpeg qt6-wayland wl-clipboard jq
 omarchy plugin add https://github.com/frank-blueview-ai/bvos-read-aloud-omarchy.git --enable
-cd ~/.config/omarchy/plugins/blueview.read-aloud
-./bin/install
 ```
 
-The marketplace installs the optional bar widget. Running `bin/install` explicitly builds and installs the player, adds a launcher, and backs up your Hyprland bindings before adding a marked block for the shortcuts and floating window. To use the player without the widget, clone this repository and run `./bin/install` there.
+If you already have the widget, run `omarchy plugin update blueview.read-aloud` to get the setup command.
 
-If Blue View Local Chat already has Kokoro installed, Read Aloud can reuse it. Otherwise, install the standalone voice:
+Then run setup from an Omarchy terminal:
 
 ```sh
-sudo pacman -S --needed uv curl
-./bin/setup-voice
+"${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/blueview.read-aloud/bin/setup"
 ```
+
+Setup installs missing system packages through Pacman, builds the player for your account, adds the desktop launcher, and backs up your Hyprland bindings before adding shortcuts. It reuses a compatible Kokoro installation from Blue View Local Chat or an earlier standalone setup. If neither is available, accept the prompt to download the voice and enable speech.
+
+To install without the bar widget, clone this repository and run `./bin/setup` from the checkout.
 
 Voice setup installs an isolated Python 3.13 environment and downloads about 354 MB of model and voice data from [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx). It checks both downloads against pinned SHA-256 hashes before installing them. Kokoro's model is [Apache 2.0 licensed](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/LICENSE), and the model files are downloaded separately. The player and widget are MIT licensed.
 
+## Use Read Aloud
+
 Press **Ctrl + Up** after copying a sentence. Middle-click the bar widget to read a selection or right-click it to read the clipboard. Click the double oval in the card or the bar to visit [Blue View](https://blueview.ai). The player passes text to the local worker over stdin and keeps the current sentence's audio in memory. It uses no remote speech API.
+
+On opening, Ctrl+Up prefers copied text when both a copy and a selection are available. While the card is open, a new plain-text copy replaces the passage and resets playback to the beginning. The preview renders Markdown headings, lists, links, emphasis, and code, and follows the highlighted sentence during playback. Choose Edit to change the source, then press Ctrl+Up to read the edited passage. The speech engine skips code and formatting symbols. Edits stay in the player. Ctrl+Down, Ctrl+Left, and Ctrl+Right are captured only while the playback card is open. Ctrl+Up is the global start shortcut.
 
 By default the worker is loaded from Blue View Local Chat's XDG data directory when available, or from `$XDG_DATA_HOME/omarchy-read-aloud/speech` for a standalone setup. The default XDG data directory is `~/.local/share`. If you set `BLUE_VIEW_ASSET_DIR`, the player uses its `speech` subdirectory.
 

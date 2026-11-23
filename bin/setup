@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+data=${XDG_DATA_HOME:-"$HOME/.local/share"}
+config=${XDG_CONFIG_HOME:-"$HOME/.config"}
+packages=(base-devel qt6-base qt6-declarative qt6-multimedia qt6-multimedia-ffmpeg qt6-wayland wl-clipboard jq)
+
+if (( EUID == 0 )); then
+    echo 'Run setup as your regular desktop user. Setup uses sudo only for missing system packages.' >&2
+    exit 1
+fi
+
+if ! command -v pacman >/dev/null || ! command -v hyprctl >/dev/null ||
+    [[ ! -f "$config/hypr/bindings.lua" ]] || ! hyprctl -j binds >/dev/null; then
+    echo 'Run setup from a terminal in Omarchy Quattro with a Lua-based Hyprland configuration.' >&2
+    exit 1
+fi
+
+has_voice() {
+    [[ -x "$1/venv/bin/python" && -f "$1/read-aloud.py" &&
+        -f "$1/kokoro-v1.0.onnx" && -f "$1/voices-v1.0.bin" ]]
+}
+
+download_voice=false
+voice_ready=false
+if [[ -n ${BLUE_VIEW_ASSET_DIR:-} ]]; then
+    if ! has_voice "$BLUE_VIEW_ASSET_DIR/speech"; then
+        echo 'BLUE_VIEW_ASSET_DIR points to an incomplete speech setup. Fix or unset it and run setup again.' >&2
+        exit 1
+    fi
+    voice_ready=true
+elif has_voice "$data/blue-view-local-chat/speech" || has_voice "$data/omarchy-read-aloud/speech"; then
+    voice_ready=true
+fi
+
+if "$voice_ready"; then
+    echo 'Using your existing Kokoro voice setup.'
+elif [[ -t 0 ]]; then
+    if read -r -p 'Download the local Kokoro voice (about 354 MB)? [Y/n] ' answer; then
+        case "$answer" in
+            ''|[Yy]|[Yy][Ee][Ss]) download_voice=true; packages+=(uv curl) ;;
+        esac
+    fi
+fi
+
+missing=()
+for package in "${packages[@]}"; do
+    if ! pacman -Qq -- "$package" >/dev/null 2>&1; then
+        missing+=("$package")
+    fi
+done
+if (( ${#missing[@]} )); then
+    sudo pacman -S --needed -- "${missing[@]}"
+fi
+
+"$root/bin/install"
+if "$download_voice"; then
+    "$root/bin/setup-voice"
+    voice_ready=true
+fi
+
+if "$voice_ready"; then
+    echo 'Read Aloud is ready. Copy a sentence and press Ctrl+Up.'
+else
+    echo 'The player is installed. Run this setup again in a terminal and accept the Kokoro download to enable speech.'
+fi
