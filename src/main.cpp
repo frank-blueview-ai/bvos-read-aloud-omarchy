@@ -6,6 +6,7 @@
 #include <QDBusReply>
 #include <QDir>
 #include <QDeadlineTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QColor>
 #include <QGuiApplication>
@@ -23,6 +24,8 @@
 #include <QStyleHints>
 #include <QTimer>
 #include <QWindow>
+
+#include <cstdio>
 
 namespace {
 constexpr auto service = "ai.blueview.ReadAloud";
@@ -145,6 +148,7 @@ public:
             if (code == 0)
                 showOpacityPanel(opacityQuery.readAllStandardOutput());
         });
+        connect(&cardResize, &QProcess::finished, this, [this] { applyCardSize(); });
         themeTimer.start();
         refreshAppearance();
     }
@@ -208,6 +212,11 @@ public:
     Q_INVOKABLE void openOpacity() {
         if (opacityAvailable() && opacityQuery.state() == QProcess::NotRunning)
             opacityQuery.start("hyprctl", {"-j", "--batch", "clients; getoption decoration:active_opacity"});
+    }
+
+    Q_INVOKABLE void resizeCard(int width, int height) {
+        pendingCardSize = QSize(width, height);
+        applyCardSize();
     }
 
     Q_INVOKABLE void setCardInputArea(QWindow *window, int height, int radius) {
@@ -373,6 +382,26 @@ private:
         if (play)
             emit showCard();
     }
+    void applyCardSize() {
+        if (cardResize.state() != QProcess::NotRunning || pendingCardSize.isEmpty()
+            || qEnvironmentVariableIsEmpty("HYPRLAND_INSTANCE_SIGNATURE"))
+            return;
+
+        // Hyprland keeps its own floating hitbox and normally resizes it about the center.
+        const QString command = QStringLiteral(R"(
+            for _, window in ipairs(hl.get_windows({ class = "omarchy-read-aloud" })) do
+                if window.pid == %1 then
+                    local at = window.at
+                    hl.dispatch(hl.dsp.window.resize({ x = %2, y = %3, window = window }))
+                    hl.dispatch(hl.dsp.window.move({ x = at.x, y = at.y, window = window }))
+                    break
+                end
+            end
+        )").arg(QCoreApplication::applicationPid()).arg(pendingCardSize.width()).arg(pendingCardSize.height());
+        pendingCardSize = {};
+        cardResize.start("hyprctl", {"eval", command});
+    }
+
     void fail(const QString &reason) {
         setHighlight(-1);
         if (!pending)
@@ -503,6 +532,8 @@ private:
     QProcess clipboardWatcher;
     QProcess roundingQuery;
     QProcess opacityQuery;
+    QProcess cardResize;
+    QSize pendingCardSize;
     QTimer deadline;
     QTimer themeTimer;
     QString themePath;
@@ -531,7 +562,16 @@ int main(int argc, char **argv) {
     app.setApplicationDisplayName("BvOs Intelligence Read Aloud");
     app.setWindowIcon(QIcon(":/double-oval.svg"));
     app.setDesktopFileName("omarchy-read-aloud");
+    QFile manifest(":/manifest.json");
+    if (manifest.open(QIODevice::ReadOnly)) {
+        const auto metadata = QJsonDocument::fromJson(manifest.readAll()).object();
+        app.setApplicationVersion(metadata.value("version").toString());
+    }
     const auto args = app.arguments();
+    if (args.size() == 2 && args.at(1) == "--version") {
+        std::printf("%s %s\n", qPrintable(app.applicationName()), qPrintable(app.applicationVersion()));
+        return 0;
+    }
     auto bus = QDBusConnection::sessionBus();
     const QString action = args.value(1).mid(2);
     const bool start = args.size() == 2 && action == "start";

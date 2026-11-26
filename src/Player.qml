@@ -15,7 +15,11 @@ Window {
     property bool editingPreview: false
     readonly property int surfaceHeight: expanded ? (reader.hasPreview ? 203 : 67) : 32
     readonly property int cornerRadius: Math.min(reader.rounding, Math.floor(surfaceHeight / 2))
-    onSurfaceHeightChanged: updateInputArea()
+    onSurfaceHeightChanged: {
+        updateInputArea()
+        if (visible)
+            reader.resizeCard(width, surfaceHeight)
+    }
     onCornerRadiusChanged: updateInputArea()
     onVisibleChanged: updateInputArea()
 
@@ -153,7 +157,7 @@ Window {
             anchors.right: parent.right
             anchors.top: parent.top
             height: 32
-            spacing: 5
+            spacing: 4
 
             Item { Layout.preferredWidth: 2 }
 
@@ -180,6 +184,12 @@ Window {
                 font.family: "Inter"
                 font.weight: Font.Medium
                 font.pixelSize: 13
+            }
+            Text {
+                text: qsTr("v%1").arg(Qt.application.version)
+                textFormat: Text.PlainText
+                color: card.muted
+                font.pixelSize: 9
             }
             Button {
                 id: waveformButton
