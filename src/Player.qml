@@ -6,16 +6,14 @@ Window {
     id: card
     title: qsTr("BvOs Intelligence Read Aloud")
     width: 242
-    height: 203
+    height: surfaceHeight
     minimumWidth: 242
     maximumWidth: 242
-    minimumHeight: 203
-    maximumHeight: 203
     flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     color: "transparent"
     property bool expanded: false
     property bool editingPreview: false
-    readonly property int surfaceHeight: expanded ? (reader.hasPreview ? height : 67) : 32
+    readonly property int surfaceHeight: expanded ? (reader.hasPreview ? 203 : 67) : 32
     readonly property int cornerRadius: Math.min(reader.rounding, Math.floor(surfaceHeight / 2))
     onSurfaceHeightChanged: updateInputArea()
     onCornerRadiusChanged: updateInputArea()
