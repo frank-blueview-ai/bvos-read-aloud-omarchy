@@ -407,6 +407,28 @@ Window {
             }
         }
         Button {
+            id: highlightMode
+            anchors.top: previewMode.top
+            anchors.right: previewMode.left
+            anchors.rightMargin: 10
+            height: previewMode.height
+            padding: 4
+            visible: card.fullscreen && reader.hasPreview && !card.editingPreview
+            focusPolicy: Qt.NoFocus
+            text: [qsTr("Word"), qsTr("Sentence"), qsTr("Paragraph")][reader.highlightMode]
+            Accessible.name: qsTr("Highlight mode: %1. Activate to switch.").arg(text)
+            CardTip { visible: highlightMode.hovered; text: qsTr("Cycle word, sentence, and paragraph highlighting") }
+            contentItem: Text {
+                text: highlightMode.text
+                color: highlightMode.hovered ? card.ink : card.accent
+                font.pixelSize: 11
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: null
+            onClicked: reader.cycleHighlightMode()
+        }
+
+        Button {
             id: previewMode
             anchors.top: parent.top
             anchors.topMargin: 64

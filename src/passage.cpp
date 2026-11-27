@@ -87,7 +87,27 @@ int previewPosition(const QString &source, int position) {
     return adjusted;
 }
 
-QString formattedPassage(const QString &source, const SpokenSentence *highlight, bool dark, bool fullscreen) {
+PassageHighlightRanges passageHighlightRanges(const QString &source, const SpokenSentence &sentence) {
+    QTextDocument document;
+    parse(document, source);
+    const auto block = document.findBlock(sentence.start);
+    PassageHighlightRanges ranges{{block.position(), block.position() + block.length() - 1}, {}};
+    const QString text = block.text().mid(sentence.start - block.position(), sentence.end - sentence.start);
+    QTextBoundaryFinder finder(QTextBoundaryFinder::Word, text);
+    int start = -1;
+    for (int position = 0; position >= 0; position = finder.toNextBoundary()) {
+        const auto reasons = finder.boundaryReasons();
+        if (start >= 0 && reasons.testFlag(QTextBoundaryFinder::EndOfItem)) {
+            ranges.words.append({sentence.start + start, sentence.start + position});
+            start = -1;
+        }
+        if (reasons.testFlag(QTextBoundaryFinder::StartOfItem))
+            start = position;
+    }
+    return ranges;
+}
+
+QString formattedPassage(const QString &source, const PassageRange *highlight, bool dark, bool fullscreen) {
     if (source.trimmed().isEmpty())
         return {};
     QTextDocument document;

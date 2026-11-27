@@ -80,6 +80,7 @@ class Reader final : public QObject {
     Q_CLASSINFO("D-Bus Interface", "ai.blueview.ReadAloud")
     Q_PROPERTY(QString preview READ preview NOTIFY previewChanged)
     Q_PROPERTY(int highlightPosition READ highlightPosition NOTIFY formattedPreviewChanged)
+    Q_PROPERTY(HighlightMode highlightMode READ highlightMode NOTIFY highlightModeChanged)
     Q_PROPERTY(QString formattedPreview READ formattedPreview NOTIFY formattedPreviewChanged)
     Q_PROPERTY(QString fullscreenPreview READ fullscreenPreview NOTIFY formattedPreviewChanged)
     Q_PROPERTY(bool hasPreview READ hasPreview NOTIFY previewChanged)
@@ -95,6 +96,9 @@ class Reader final : public QObject {
     Q_PROPERTY(int rounding READ rounding NOTIFY appearanceChanged)
 
 public:
+    enum HighlightMode { Word, Sentence, Paragraph };
+    Q_ENUM(HighlightMode)
+
     Reader(const QString &copied, const QString &selected)
         : lastCopy(copied), lastSelection(selected) {
         connect(&clipboardWatcher, &QProcess::readyReadStandardOutput, this, [this] {
@@ -108,6 +112,15 @@ public:
             }
         });
         connect(&player, &SpeechPlayback::changed, this, &Reader::changed);
+        connect(&player, &SpeechPlayback::changed, this, [this] {
+            if (mode != Word || highlightIndex < 0)
+                return;
+            const int next = currentWord();
+            if (next != highlightedWord) {
+                highlightedWord = next;
+                emit formattedPreviewChanged();
+            }
+        });
         connect(&player, &SpeechPlayback::finished, this, [this] {
             if (index + 1 < passages.size())
                 goTo(index + 1);
@@ -176,8 +189,21 @@ public:
     }
 
     QString preview() const { return previewText; }
+    HighlightMode highlightMode() const { return mode; }
+    Q_INVOKABLE void cycleHighlightMode() {
+        mode = static_cast<HighlightMode>((mode + 1) % 3);
+        if (mode == Word)
+            highlightedWord = currentWord();
+        emit highlightModeChanged();
+        emit formattedPreviewChanged();
+    }
+
     int highlightPosition() const {
-        return highlightIndex < 0 ? -1 : previewPosition(previewText, passages.at(highlightIndex).start);
+        if (highlightIndex < 0)
+            return -1;
+        const int position = mode == Word && highlightedWord >= 0
+            ? highlightRanges.words.at(highlightedWord).start : passages.at(highlightIndex).start;
+        return previewPosition(previewText, position);
     }
     QString formattedPreview() const { return previewHtml(false); }
     QString fullscreenPreview() const { return previewHtml(true); }
@@ -341,14 +367,23 @@ signals:
     void changed();
     void previewChanged();
     void formattedPreviewChanged();
+    void highlightModeChanged();
     void previewReplaced();
     void showCard();
     void appearanceChanged();
 
 private:
     QString previewHtml(bool fullscreen) const {
-        const auto *highlight = highlightIndex >= 0 ? &passages.at(highlightIndex) : nullptr;
-        return formattedPassage(previewText, highlight, darkTheme, fullscreen);
+        if (highlightIndex < 0)
+            return formattedPassage(previewText, nullptr, darkTheme, fullscreen);
+
+        const auto &sentence = passages.at(highlightIndex);
+        PassageRange range{sentence.start, sentence.end};
+        if (mode == Paragraph)
+            range = highlightRanges.paragraph;
+        else if (mode == Word && highlightedWord >= 0)
+            range = highlightRanges.words.at(highlightedWord);
+        return formattedPassage(previewText, &range, darkTheme, fullscreen);
     }
 
     void load(const QString &text, bool play) {
@@ -487,10 +522,36 @@ private:
         }
     }
 
+    int currentWord() const {
+        if (highlightRanges.words.isEmpty())
+            return -1;
+        const double duration = player.duration();
+        if (duration <= 0)
+            return 0;
+
+        // Kokoro returns PCM without word timestamps. Estimate timing by word length.
+        const double position = player.position() / duration;
+        int totalWeight = 0;
+        for (const auto &word : highlightRanges.words)
+            totalWeight += word.end - word.start + 2;
+
+        double remaining = position * totalWeight;
+        for (qsizetype i = 0; i < highlightRanges.words.size(); ++i) {
+            const auto &word = highlightRanges.words.at(i);
+            remaining -= word.end - word.start + 2;
+            if (remaining < 0)
+                return int(i);
+        }
+        return int(highlightRanges.words.size() - 1);
+    }
+
     void setHighlight(int sentence) {
         if (highlightIndex == sentence)
             return;
         highlightIndex = sentence;
+        highlightRanges = sentence >= 0 ? passageHighlightRanges(previewText, passages.at(sentence))
+                                        : PassageHighlightRanges{};
+        highlightedWord = mode == Word ? currentWord() : -1;
         emit formattedPreviewChanged();
     }
 
@@ -571,6 +632,9 @@ private:
     bool darkTheme = QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
     QList<SpokenSentence> passages;
     int highlightIndex = -1;
+    int highlightedWord = -1;
+    HighlightMode mode = Sentence;
+    PassageHighlightRanges highlightRanges{};
     QString hint;
     QString previewText;
     bool editedPreview = false;
