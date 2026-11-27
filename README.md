@@ -17,7 +17,21 @@ Read selected or copied text on Omarchy using the local Kokoro speech engine. A 
 | Adjust window opacity (with the BVOS opacity plugin) | Hover and click ◐ |
 | Close the player | Click ×, or press Esc while the compact card has focus |
 
-## Install
+## Standalone desktop preview
+
+See [GitHub Releases](https://github.com/frank-blueview-ai/bvos-read-aloud-omarchy/releases) for available standalone packages. The desktop app opens as a regular, resizable window. With a passage loaded, use the fullscreen and highlighting controls described below.
+
+On Debian 13 (amd64), download the `.deb` and install it from the directory where you saved it:
+
+```sh
+sudo apt install ./bvos-read-aloud_0.2.6_amd64.deb
+```
+
+Open **BvOs Intelligence Read Aloud** from your app menu. Choose **Set Up Kokoro Voice** and confirm the one-time download of about 354 MB. The installer includes the speech runtime. After the model download, the app can read offline. Use **Read Clipboard** to read text you copied, or **Paste Text…** to paste or type a passage. The standalone app reads the clipboard when you ask it to.
+
+The desktop packaging workflow also defines a Windows 11 x64 installer and a macOS development disk image. Platform support requires testing the installed package on that OS. The macOS development image requires Developer ID signing and notarization before public distribution.
+
+## Install on Omarchy
 
 On Omarchy Quattro with Lua-based Hyprland, add the bar widget from the [Omarchy Marketplace](https://plugins.omarchy.org/plugin.html?id=blueview.read-aloud) or run:
 
@@ -74,6 +88,8 @@ By default the worker is loaded from Blue View Local Chat's XDG data directory w
 
 ## Development
 
-Run `./bin/build` to compile and `omarchy plugin validate .` to validate the plugin. Test from an Omarchy terminal with `./build/omarchy-read-aloud --text "First sentence. Here is another."`
+Run `./bin/build` to compile the Omarchy player and `omarchy plugin validate .` to validate the plugin. Test from an Omarchy terminal with `./build/omarchy-read-aloud --text "First sentence. Here is another."`
 
-To remove the player, remove its binary, desktop entry, icon, and `~/.config/hypr/read-aloud.lua` and delete the marked **Blue View Read Aloud** block from your Hyprland bindings. Reload Hyprland, then use `omarchy plugin remove blueview.read-aloud` if you installed the bar button. To remove the standalone model and Python environment, remove the `omarchy-read-aloud/speech` directory from your XDG data directory.
+On Debian, remove the standalone app with `sudo apt remove bvos-read-aloud`. Voice files live in `${XDG_DATA_HOME:-$HOME/.local/share}/bvos-read-aloud/speech` and can be deleted separately.
+
+To remove the Omarchy player, remove its binary, desktop entry, icon, and `~/.config/hypr/read-aloud.lua` and delete the marked **Blue View Read Aloud** block from your Hyprland bindings. Reload Hyprland, then use `omarchy plugin remove blueview.read-aloud` if you installed the bar button. To remove the standalone model and Python environment, remove the `omarchy-read-aloud/speech` directory from your XDG data directory.
