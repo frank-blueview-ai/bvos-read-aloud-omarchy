@@ -21,7 +21,7 @@ Architecture: $arch
 Maintainer: Blue View <152930412+frank-blueview-ai@users.noreply.github.com>
 Section: utils
 Priority: optional
-Depends: ca-certificates, libqt6gui6, libqt6multimedia6, libqt6qml6, libqt6quick6, libqt6quickcontrols2-6, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-templates, qml6-module-qtquick-window, qml6-module-qtqml-workerscript, qt6-qpa-plugins, libgomp1
+Depends: ca-certificates, libqt6gui6, libqt6multimedia6, libqt6qml6, libqt6quick6, libqt6quickcontrols2-6, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-templates, qml6-module-qtquick-window, qml6-module-qtqml-workerscript, qt6-qpa-plugins, qt6-svg-plugins, libgomp1
 Recommends: qt6-wayland, fonts-noto-core
 Description: Offline desktop text reader with synchronized highlighting
  BvOs Read Aloud reads copied or pasted text using Kokoro. Its full-screen
