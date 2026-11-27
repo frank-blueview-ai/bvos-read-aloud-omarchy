@@ -90,6 +90,16 @@ By default the worker is loaded from Blue View Local Chat's XDG data directory w
 
 Run `./bin/build` to compile the Omarchy player and `omarchy plugin validate .` to validate the plugin. Test from an Omarchy terminal with `./build/omarchy-read-aloud --text "First sentence. Here is another."`
 
+### Build on Windows
+
+In an x64 Visual Studio developer shell, put Qt 6.8 for MSVC 2022 (including Qt Multimedia) and Python 3.13 x64 on PATH. Install Inno Setup 6 in its default location. From the repository, run:
+
+```powershell
+pwsh -File packaging/windows.ps1
+```
+
+The script builds the standalone app, bundles the speech worker, and writes the installer to `artifacts/`.
+
 On Debian, remove the standalone app with `sudo apt remove bvos-read-aloud`. Voice files live in `${XDG_DATA_HOME:-$HOME/.local/share}/bvos-read-aloud/speech` and can be deleted separately.
 
 To remove the Omarchy player, remove its binary, desktop entry, icon, and `~/.config/hypr/read-aloud.lua` and delete the marked **Blue View Read Aloud** block from your Hyprland bindings. Reload Hyprland, then use `omarchy plugin remove blueview.read-aloud` if you installed the bar button. To remove the standalone model and Python environment, remove the `omarchy-read-aloud/speech` directory from your XDG data directory.

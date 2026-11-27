@@ -63,23 +63,7 @@ jobs:
       - name: Build and package
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $true
-          New-Item -ItemType Directory -Force build/standalone, build/windows-package | Out-Null
-          Push-Location build/standalone
-          qmake ../../read-aloud.pro CONFIG+=standalone
-          nmake
-          Pop-Location
-          $package = 'build/windows-package'
-          Copy-Item build/standalone/release/bvos-read-aloud.exe $package/
-          windeployqt --release --qmldir src "$package/bvos-read-aloud.exe"
-          python -m pip install -r packaging/worker-requirements.txt
-          python -m PyInstaller --noconfirm --onedir --name bvos-speech --collect-all espeakng_loader --collect-data certifi --collect-data kokoro_onnx speech/read-aloud.py
-          & dist/bvos-speech/bvos-speech.exe --help
-          Copy-Item dist/bvos-speech "$package/speech-worker" -Recurse
-          $env:BVOS_VERSION = (Get-Content manifest.json | ConvertFrom-Json).version
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $iscc packaging/windows.iss
+          ./packaging/windows.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: windows-11-x64
