@@ -35,7 +35,7 @@ Window {
         if (visible)
             reader.setCardInputArea(card, surfaceHeight, cornerRadius)
     }
-    readonly property int passageSideMargin: fullscreen ? Math.max(24, Math.floor((width - 840) / 2)) : 10
+    readonly property int passageSideMargin: fullscreen ? 24 : 10
     readonly property color ink: reader.dark ? "#eef3fb" : "#0f2a44"
     readonly property color muted: reader.dark ? "#b6c3d4" : "#4a6079"
     readonly property color subtle: reader.dark ? "#a3b1c3" : "#5a6f86"
@@ -110,7 +110,7 @@ Window {
                 height: 16
                 scale: 0.85
                 readonly property string shape: control.symbol
-                readonly property int passageSideMargin: fullscreen ? Math.max(24, Math.floor((width - 840) / 2)) : 10
+                readonly property int passageSideMargin: fullscreen ? 24 : 10
     readonly property color ink: !control.enabled ? Qt.alpha(card.subtle, 0.48)
                     : control.primary ? card.accent : card.ink
                 onShapeChanged: requestPaint()
