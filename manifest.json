@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "blueview.read-aloud",
   "name": "BvOs Intelligence Read Aloud",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "author": "Blue View",
   "license": "MIT",
   "description": "Read selected or copied text using the local Kokoro speech engine.",

@@ -6,27 +6,36 @@ Window {
     id: card
     title: qsTr("BvOs Intelligence Read Aloud")
     width: 242
-    height: surfaceHeight
-    minimumWidth: 242
-    maximumWidth: 242
+    height: compactHeight
     flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     color: "transparent"
     property bool expanded: false
     property bool editingPreview: false
-    readonly property int surfaceHeight: expanded ? (reader.hasPreview ? 203 : 67) : 32
-    readonly property int cornerRadius: Math.min(reader.rounding, Math.floor(surfaceHeight / 2))
-    onSurfaceHeightChanged: {
+    readonly property bool fullscreen: visibility === Window.FullScreen
+    readonly property int compactHeight: expanded ? (reader.hasPreview ? 203 : 67) : 32
+    readonly property int surfaceHeight: fullscreen ? height : compactHeight
+    readonly property int cornerRadius: fullscreen ? 0 : Math.min(reader.rounding, Math.floor(surfaceHeight / 2))
+    onCompactHeightChanged: {
         updateInputArea()
-        if (visible)
-            reader.resizeCard(width, surfaceHeight)
+        if (visible && !fullscreen)
+            reader.resizeCard(242, compactHeight)
     }
     onCornerRadiusChanged: updateInputArea()
+    onSurfaceHeightChanged: updateInputArea()
+    onWidthChanged: if (fullscreen) updateInputArea()
+    onFullscreenChanged: {
+        collapse.stop()
+        if (!fullscreen && !hover.hovered)
+            collapse.restart()
+        Qt.callLater(passagePreview.followHighlight)
+    }
     onVisibleChanged: updateInputArea()
 
     function updateInputArea() {
         if (visible)
             reader.setCardInputArea(card, surfaceHeight, cornerRadius)
     }
+    readonly property int passageSideMargin: fullscreen ? Math.max(24, Math.floor((width - 840) / 2)) : 10
     readonly property color ink: reader.dark ? "#eef3fb" : "#0f2a44"
     readonly property color muted: reader.dark ? "#b6c3d4" : "#4a6079"
     readonly property color subtle: reader.dark ? "#a3b1c3" : "#5a6f86"
@@ -36,17 +45,22 @@ Window {
     Timer {
         id: collapse
         interval: 140
-        onTriggered: if (!hover.hovered && !headerDrag.active) card.expanded = false
+        onTriggered: if (!card.fullscreen && !hover.hovered && !headerDrag.active) card.expanded = false
     }
 
     Shortcut {
         sequence: "Escape"
-        onActivated: card.close()
+        onActivated: {
+            if (card.fullscreen)
+                reader.setCardFullscreen(false)
+            else
+                card.close()
+        }
     }
 
     Connections {
         target: reader
-        function onShowCard() { card.show() }
+        function onShowCard() { if (!card.visible) card.show() }
     }
 
     component CardTip: ToolTip {
@@ -96,7 +110,8 @@ Window {
                 height: 16
                 scale: 0.85
                 readonly property string shape: control.symbol
-                readonly property color ink: !control.enabled ? Qt.alpha(card.subtle, 0.48)
+                readonly property int passageSideMargin: fullscreen ? Math.max(24, Math.floor((width - 840) / 2)) : 10
+    readonly property color ink: !control.enabled ? Qt.alpha(card.subtle, 0.48)
                     : control.primary ? card.accent : card.ink
                 onShapeChanged: requestPaint()
                 onInkChanged: requestPaint()
@@ -107,6 +122,17 @@ Window {
                     if (shape === "pause") {
                         ctx.fillRect(3, 2, 3, 12)
                         ctx.fillRect(10, 2, 3, 12)
+                    } else if (shape === "fullscreen" || shape === "restore") {
+                        const inset = shape === "restore" ? 5 : 2
+                        const direction = shape === "restore" ? -1 : 1
+                        for (const x of [-1, 1]) {
+                            for (const y of [-1, 1]) {
+                                const cornerX = x < 0 ? inset : 16 - inset
+                                const cornerY = y < 0 ? inset : 16 - inset
+                                ctx.fillRect(Math.min(cornerX, cornerX - x * direction * 4), cornerY - 0.75, 4, 1.5)
+                                ctx.fillRect(cornerX - 0.75, Math.min(cornerY, cornerY - y * direction * 4), 1.5, 4)
+                            }
+                        }
                     } else if (shape === "stop") {
                         ctx.fillRect(3, 3, 10, 10)
                     } else {
@@ -139,7 +165,7 @@ Window {
                 if (hovered) {
                     collapse.stop()
                     card.expanded = true
-                } else if (!headerDrag.active) {
+                } else if (!card.fullscreen && !headerDrag.active) {
                     collapse.restart()
                 }
             }
@@ -259,27 +285,11 @@ Window {
                 color: card.muted
                 font.pixelSize: 11
             }
-            Button {
-                id: opacityButton
-                visible: card.expanded && reader.opacityAvailable
-                Layout.preferredWidth: 23
-                Layout.preferredHeight: 23
-                padding: 0
-                focusPolicy: Qt.NoFocus
-                Accessible.name: qsTr("Window opacity")
-                CardTip { visible: opacityButton.hovered; text: opacityButton.Accessible.name }
-                contentItem: Text {
-                    text: "◐"
-                    color: opacityButton.hovered ? card.ink : card.muted
-                    font.pixelSize: 15
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                background: Rectangle {
-                    radius: width / 2
-                    color: opacityButton.hovered ? Qt.alpha(card.accent, 0.15) : "transparent"
-                }
-                onClicked: reader.openOpacity()
+            PlayerButton {
+                visible: card.expanded
+                symbol: card.fullscreen ? "restore" : "fullscreen"
+                label: card.fullscreen ? qsTr("Exit fullscreen (Esc)") : qsTr("Fullscreen")
+                onClicked: reader.setCardFullscreen(!card.fullscreen)
             }
 
             Button {
@@ -313,6 +323,7 @@ Window {
             DragHandler {
                 id: headerDrag
                 target: null
+                enabled: !card.fullscreen
                 acceptedButtons: Qt.LeftButton
                 cursorShape: active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 onActiveChanged: {
@@ -329,8 +340,8 @@ Window {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.topMargin: 34
-            anchors.leftMargin: 9
-            anchors.rightMargin: 7
+            anchors.leftMargin: card.fullscreen ? card.passageSideMargin : 9
+            anchors.rightMargin: card.fullscreen ? card.passageSideMargin : 7
             height: 28
             spacing: 2
             visible: card.expanded
@@ -366,6 +377,29 @@ Window {
                 enabled: reader.sentence < reader.total
                 onClicked: reader.next()
             }
+            Button {
+                id: opacityButton
+                visible: card.expanded && reader.opacityAvailable
+                Layout.preferredWidth: 23
+                Layout.preferredHeight: 23
+                padding: 0
+                focusPolicy: Qt.NoFocus
+                Accessible.name: qsTr("Window opacity")
+                CardTip { visible: opacityButton.hovered; text: opacityButton.Accessible.name }
+                contentItem: Text {
+                    text: "◐"
+                    color: opacityButton.hovered ? card.ink : card.muted
+                    font.pixelSize: 15
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: width / 2
+                    color: opacityButton.hovered ? Qt.alpha(card.accent, 0.15) : "transparent"
+                }
+                onClicked: reader.openOpacity()
+            }
+
             PlayerButton {
                 symbol: "stop"
                 label: qsTr("Stop and close")
@@ -377,7 +411,7 @@ Window {
             anchors.top: parent.top
             anchors.topMargin: 64
             anchors.right: parent.right
-            anchors.rightMargin: 10
+            anchors.rightMargin: card.passageSideMargin
             height: 21
             padding: 4
             visible: card.expanded && reader.hasPreview
@@ -406,7 +440,9 @@ Window {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            anchors.margins: 10
+            anchors.leftMargin: card.passageSideMargin
+            anchors.rightMargin: card.passageSideMargin
+            anchors.bottomMargin: card.fullscreen ? 24 : 10
             anchors.topMargin: 87
             visible: card.expanded && reader.hasPreview
             clip: true
@@ -448,7 +484,7 @@ Window {
                     textFormat: TextEdit.RichText
                     wrapMode: TextEdit.Wrap
                     color: card.ink
-                    font.pixelSize: 12
+                    font.pixelSize: card.fullscreen ? 19 : 12
                 }
 
                 TextArea {
@@ -463,7 +499,7 @@ Window {
                     selectionColor: card.accent
                     selectedTextColor: reader.dark ? "#0f1724" : "#ffffff"
                     padding: 3
-                    font.pixelSize: 12
+                    font.pixelSize: card.fullscreen ? 19 : 12
                     background: null
                     onTextChanged: if (activeFocus && text !== reader.preview) reader.editPreview(text)
                     onCursorRectangleChanged: {

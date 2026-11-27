@@ -219,6 +219,20 @@ public:
         applyCardSize();
     }
 
+    Q_INVOKABLE void setCardFullscreen(bool fullscreen) {
+        if (fullscreen) {
+            runCardCommand(QStringLiteral(R"(
+                hl.dispatch(hl.dsp.window.pin({ action = "off", window = window }))
+                hl.dispatch(hl.dsp.window.fullscreen({ action = "set", window = window }))
+            )"));
+        } else {
+            runCardCommand(QStringLiteral(R"(
+                hl.dispatch(hl.dsp.window.fullscreen({ action = "unset", window = window }))
+                hl.dispatch(hl.dsp.window.pin({ action = "on", window = window }))
+            )"));
+        }
+    }
+
     Q_INVOKABLE void setCardInputArea(QWindow *window, int height, int radius) {
         const QRect bounds(0, 0, window->width(), height);
         if (radius == 0) {
@@ -382,24 +396,36 @@ private:
         if (play)
             emit showCard();
     }
-    void applyCardSize() {
-        if (cardResize.state() != QProcess::NotRunning || pendingCardSize.isEmpty()
-            || qEnvironmentVariableIsEmpty("HYPRLAND_INSTANCE_SIGNATURE"))
+    void runCardCommand(const QString &actions) {
+        if (qEnvironmentVariableIsEmpty("HYPRLAND_INSTANCE_SIGNATURE")
+            || cardResize.state() != QProcess::NotRunning)
             return;
 
-        // Hyprland keeps its own floating hitbox and normally resizes it about the center.
         const QString command = QStringLiteral(R"(
             for _, window in ipairs(hl.get_windows({ class = "omarchy-read-aloud" })) do
                 if window.pid == %1 then
-                    local at = window.at
-                    hl.dispatch(hl.dsp.window.resize({ x = %2, y = %3, window = window }))
-                    hl.dispatch(hl.dsp.window.move({ x = at.x, y = at.y, window = window }))
+                    %2
                     break
                 end
             end
-        )").arg(QCoreApplication::applicationPid()).arg(pendingCardSize.width()).arg(pendingCardSize.height());
-        pendingCardSize = {};
+        )").arg(QCoreApplication::applicationPid()).arg(actions);
         cardResize.start("hyprctl", {"eval", command});
+    }
+
+    void applyCardSize() {
+        if (cardResize.state() != QProcess::NotRunning || pendingCardSize.isEmpty())
+            return;
+
+        // Hyprland keeps its own floating hitbox and normally resizes it about the center.
+        const QString actions = QStringLiteral(R"(
+            if window.fullscreen == 0 then
+                local at = window.at
+                hl.dispatch(hl.dsp.window.resize({ x = %1, y = %2, window = window }))
+                hl.dispatch(hl.dsp.window.move({ x = at.x, y = at.y, window = window }))
+            end
+        )").arg(pendingCardSize.width()).arg(pendingCardSize.height());
+        pendingCardSize = {};
+        runCardCommand(actions);
     }
 
     void fail(const QString &reason) {
