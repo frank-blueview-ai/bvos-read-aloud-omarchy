@@ -7,12 +7,15 @@ Read selected or copied text on Omarchy using the local Kokoro speech engine. A 
 | Action | Shortcut |
 | --- | --- |
 | Start reading or resume playback | Ctrl + Up or click the header’s play icon when a passage is loaded |
-| Pause | Ctrl + Down or click the green waveform |
+| Pause | Ctrl + Down or click the playback indicator |
 | Previous or next sentence | Ctrl + Left / Right |
 | Read a new selection, with clipboard fallback | Super + Shift + R |
 | Read the clipboard directly | Super + Alt + R |
+| Enter fullscreen | Hover over the card and click the four-corner icon beside × |
+| Return to the card | Click the same icon or press Esc in fullscreen |
+| Switch highlight mode in fullscreen | Click the mode name beside Edit |
 | Adjust window opacity (with the BVOS opacity plugin) | Hover and click ◐ |
-| Close the card | Hover and click ×, or press Esc when the player has focus |
+| Close the player | Click ×, or press Esc while the compact card has focus |
 
 ## Install
 
@@ -22,7 +25,7 @@ On Omarchy Quattro with Lua-based Hyprland, add the bar widget from the [Omarchy
 omarchy plugin add https://github.com/frank-blueview-ai/bvos-read-aloud-omarchy.git --enable
 ```
 
-If you already have the widget, run `omarchy plugin update blueview.read-aloud` to get the setup command.
+If you already have the widget, run `omarchy plugin update blueview.read-aloud`, then run setup again to rebuild the player. The installed version appears beside **BvOs** and is also available from `~/.local/bin/omarchy-read-aloud --version`.
 
 Then run setup from an Omarchy terminal:
 
@@ -40,9 +43,34 @@ Voice setup installs an isolated Python 3.13 environment and downloads about 354
 
 Press **Ctrl + Up** after copying a sentence. Middle-click the bar widget to read a selection or right-click it to read the clipboard. Click the double oval in the card or the bar to visit [Blue View](https://blueview.ai). The player passes text to the local worker over stdin and keeps the current sentence's audio in memory. It uses no remote speech API.
 
-On opening, Ctrl+Up prefers copied text when both a copy and a selection are available. While the card is open, a new plain-text copy replaces the passage and resets playback to the beginning. The preview renders Markdown headings, lists, links, emphasis, and code, and follows the highlighted sentence during playback. Choose Edit to change the source, then press Ctrl+Up to read the edited passage. The speech engine skips code and formatting symbols. Edits stay in the player. Ctrl+Down, Ctrl+Left, and Ctrl+Right are captured only while the playback card is open. Ctrl+Up is the global start shortcut.
+On opening, Ctrl+Up prefers copied text when both a copy and a selection are available. While the card is open, a new plain-text copy replaces the passage and resets playback to the beginning. The preview renders Markdown headings, lists, links, emphasis, and code, and follows the active highlight during playback. Choose Edit to change the source, then press Ctrl+Up to read the edited passage. The speech engine skips code and formatting symbols. Edits stay in the player. Ctrl+Down, Ctrl+Left, and Ctrl+Right are captured only while the playback card is open. Ctrl+Up is the global start shortcut.
 
 By default the worker is loaded from Blue View Local Chat's XDG data directory when available, or from `$XDG_DATA_HOME/omarchy-read-aloud/speech` for a standalone setup. The default XDG data directory is `~/.local/share`. If you set `BLUE_VIEW_ASSET_DIR`, the player uses its `speech` subdirectory.
+
+## Fullscreen reading and highlighting
+
+1. Load a passage and hover over the floating card to show its controls.
+2. Click the four-corner icon next to **×**. The preview fills the monitor, with larger serif text and more space between lines and paragraphs. Markdown headings, lists, and emphasis remain visible.
+3. Click **Sentence** next to **Edit** to cycle through **Sentence → Paragraph → Word → Sentence**. The button always shows the active mode. You can switch while reading or paused.
+4. Click the fullscreen icon again or press **Esc** to return to the card at its original position. Playback continues through either transition.
+
+| Mode | What follows the audio |
+| --- | --- |
+| Sentence | The current spoken sentence. This is the default. |
+| Paragraph | The formatted paragraph containing the current spoken sentence. |
+| Word | An estimated current word within the spoken sentence. The highlight advances with audio playback and holds its position when paused. Kokoro does not supply word timestamps, so the highlight can lead or lag the voice. |
+
+### Sentence mode
+
+![The first sentence highlighted while the second sentence in the same paragraph stays unshaded](docs/fullscreen-sentence.png)
+
+### Paragraph mode
+
+![Both sentences in the first paragraph highlighted while the second paragraph stays unshaded](docs/fullscreen-paragraph.png)
+
+### Word mode
+
+![Only the word gamma highlighted in the first sentence, with the Word mode button beside Edit](docs/fullscreen-word.png)
 
 ## Development
 
