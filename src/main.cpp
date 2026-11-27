@@ -1,9 +1,12 @@
 #include "speechplayback.h"
 #include "passage.h"
 
+#ifndef BVOS_STANDALONE
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
+#endif
+#include <QClipboard>
 #include <QDir>
 #include <QDeadlineTimer>
 #include <QFile>
@@ -28,10 +31,36 @@
 #include <cstdio>
 
 namespace {
+#ifndef BVOS_STANDALONE
 constexpr auto service = "ai.blueview.ReadAloud";
 constexpr auto path = "/ReadAloud";
+
+#endif
 constexpr int maxText = 64000;
 
+#ifdef BVOS_STANDALONE
+QString modelDirectory() {
+    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/speech";
+}
+
+QString bundledWorker() {
+    const QString bin = QCoreApplication::applicationDirPath();
+#ifdef Q_OS_WIN
+    return bin + "/speech-worker/bvos-speech.exe";
+#elif defined(Q_OS_MACOS)
+    return bin + "/../Frameworks/speech-worker/bvos-speech";
+#else
+    return bin + "/../lib/bvos-read-aloud/speech-worker/bvos-speech";
+#endif
+}
+
+bool modelsAvailable() {
+    const QString dir = modelDirectory();
+    return QFileInfo::exists(dir + "/kokoro-v1.0.onnx") && QFileInfo::exists(dir + "/voices-v1.0.bin");
+}
+#endif
+
+#ifndef BVOS_STANDALONE
 bool hasVoice(const QString &dir) {
     return QFileInfo(dir + "/venv/bin/python").isExecutable()
         && QFileInfo::exists(dir + "/read-aloud.py")
@@ -73,11 +102,13 @@ QString clipboard(bool primary) {
     }
     return QString::fromUtf8(QByteArray::fromBase64(frame)).left(maxText + 1);
 }
+#endif
 }
 
 class Reader final : public QObject {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "ai.blueview.ReadAloud")
+    Q_PROPERTY(bool voiceSetupAvailable READ voiceSetupAvailable NOTIFY changed)
     Q_PROPERTY(QString preview READ preview NOTIFY previewChanged)
     Q_PROPERTY(int highlightPosition READ highlightPosition NOTIFY formattedPreviewChanged)
     Q_PROPERTY(HighlightMode highlightMode READ highlightMode NOTIFY highlightModeChanged)
@@ -147,6 +178,28 @@ public:
         deadline.setSingleShot(true);
         deadline.setInterval(60000);
         connect(&deadline, &QTimer::timeout, &worker, &QProcess::kill);
+#ifdef BVOS_STANDALONE
+        connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this] {
+            darkTheme = QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+            emit formattedPreviewChanged();
+            emit changed();
+        });
+        connect(&voiceSetup, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+            if (error == QProcess::FailedToStart)
+                fail(tr("The bundled Kokoro worker could not start."));
+        });
+        connect(&voiceSetup, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
+            if (status != QProcess::NormalExit || code != 0 || !modelsAvailable()) {
+                const QString detail = QString::fromUtf8(voiceSetup.readAllStandardError()).trimmed();
+                fail(detail.isEmpty() ? tr("The Kokoro download failed. Try again.") : detail);
+            } else if (!previewText.trimmed().isEmpty()) {
+                Read(previewText);
+            } else {
+                message = tr("Voice ready. Paste or copy text to begin.");
+                emit changed();
+            }
+        });
+#else
         themePath = qEnvironmentVariable("XDG_STATE_HOME", QDir::homePath() + "/.local/state")
             + "/omarchy/current/theme/colors.toml";
         themeTimer.setInterval(1500);
@@ -165,10 +218,13 @@ public:
         connect(&cardResize, &QProcess::finished, this, [this] { applyCardSize(); });
         themeTimer.start();
         refreshAppearance();
+#endif
     }
 
     void watchClipboard() {
+#ifndef BVOS_STANDALONE
         clipboardWatcher.start("wl-paste", clipboardWatchArgs(false));
+#endif
     }
 
     ~Reader() override {
@@ -186,6 +242,34 @@ public:
             worker.kill();
             worker.waitForFinished();
         }
+    }
+
+    bool voiceSetupAvailable() const {
+#ifdef BVOS_STANDALONE
+        return !modelsAvailable() && voiceSetup.state() == QProcess::NotRunning;
+#else
+        return false;
+#endif
+    }
+
+    Q_INVOKABLE void setupVoice() {
+#ifdef BVOS_STANDALONE
+        if (!voiceSetupAvailable())
+            return;
+        voiceSetup.start(bundledWorker(), {"--download-models", modelDirectory()});
+        message = tr("Downloading Kokoro voice files…");
+        emit changed();
+#endif
+    }
+
+    Q_INVOKABLE void readClipboard() {
+#ifdef BVOS_STANDALONE
+        Read(QGuiApplication::clipboard()->text().left(maxText + 1));
+#endif
+    }
+
+    Q_INVOKABLE void readText(const QString &text) {
+        Read(text);
     }
 
     QString preview() const { return previewText; }
@@ -339,6 +423,7 @@ public slots:
     }
 
     void Start() {
+#ifndef BVOS_STANDALONE
         if (paused() || editedPreview) {
             Control("start");
             return;
@@ -357,6 +442,7 @@ public slots:
             Read(selected);
         else if (!Control("start"))
             Read(!selected.trimmed().isEmpty() ? selected : copied);
+#endif
     }
 
     void Read(QString text) {
@@ -421,6 +507,14 @@ private:
             if (passages.isEmpty()) {
                 fail(tr("No readable prose in this passage."));
             } else if (worker.state() == QProcess::NotRunning) {
+#ifdef BVOS_STANDALONE
+                if (!modelsAvailable()) {
+                    fail(tr("Set up the Kokoro voice to start reading."));
+                } else {
+                    deadline.start();
+                    worker.start(bundledWorker(), {"--model-dir", modelDirectory()});
+                }
+#else
                 const QString dir = voiceDirectory();
                 if (!hasVoice(dir)) {
                     fail(tr("Run bin/setup-voice to install Kokoro."));
@@ -428,6 +522,7 @@ private:
                     deadline.start();
                     worker.start(dir + "/venv/bin/python", {dir + "/read-aloud.py"});
                 }
+#endif
             } else {
                 requestAudio();
             }
@@ -622,6 +717,7 @@ private:
     SpeechPlayback player;
     QProcess worker;
     QProcess clipboardWatcher;
+    QProcess voiceSetup;
     QProcess roundingQuery;
     QProcess opacityQuery;
     QProcess cardResize;
@@ -653,10 +749,15 @@ private:
 
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
+#ifdef BVOS_STANDALONE
+    app.setApplicationName("bvos-read-aloud");
+    app.setDesktopFileName("bvos-read-aloud");
+#else
     app.setApplicationName("omarchy-read-aloud");
+    app.setDesktopFileName("omarchy-read-aloud");
+#endif
     app.setApplicationDisplayName("BvOs Intelligence Read Aloud");
     app.setWindowIcon(QIcon(":/double-oval.svg"));
-    app.setDesktopFileName("omarchy-read-aloud");
     QFile manifest(":/manifest.json");
     if (manifest.open(QIODevice::ReadOnly)) {
         const auto metadata = QJsonDocument::fromJson(manifest.readAll()).object();
@@ -667,6 +768,12 @@ int main(int argc, char **argv) {
         std::printf("%s %s\n", qPrintable(app.applicationName()), qPrintable(app.applicationVersion()));
         return 0;
     }
+    const bool explicitText = args.size() == 3 && args.at(1) == "--text";
+#ifdef BVOS_STANDALONE
+    const QString text = explicitText ? args.at(2) : args.contains("--clipboard")
+        ? QGuiApplication::clipboard()->text().left(maxText + 1) : QString();
+    Reader reader({}, {});
+#else
     auto bus = QDBusConnection::sessionBus();
     const QString action = args.value(1).mid(2);
     const bool start = args.size() == 2 && action == "start";
@@ -684,7 +791,6 @@ int main(int argc, char **argv) {
         const QDBusReply<void> result = running.call("Start");
         return result.isValid() ? 0 : 1;
     }
-    const bool explicitText = args.size() == 3 && args.at(1) == "--text";
     const QString copied = explicitText ? QString() : clipboard(false);
     const QString selected = explicitText || args.contains("--clipboard") ? QString() : clipboard(true);
     QString text = !selected.trimmed().isEmpty() ? selected : copied;
@@ -703,7 +809,13 @@ int main(int argc, char **argv) {
             return result.isValid() ? 0 : 1;
         }
     }
+#endif
     QQmlApplicationEngine engine;
+#ifdef BVOS_STANDALONE
+    engine.rootContext()->setContextProperty("standalonePlayer", true);
+#else
+    engine.rootContext()->setContextProperty("standalonePlayer", false);
+#endif
     engine.rootContext()->setContextProperty("reader", &reader);
     engine.load(QUrl("qrc:/Player.qml"));
     if (engine.rootObjects().isEmpty())

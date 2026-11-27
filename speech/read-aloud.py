@@ -1,11 +1,15 @@
 """Keep the local Kokoro model loaded and return mono PCM blocks to the app."""
 
+import argparse
+import hashlib
 import json
 import os
 import re
 from pathlib import Path
 import sys
 from base64 import b64encode
+from tempfile import NamedTemporaryFile
+from urllib.request import urlopen
 
 from kokoro_onnx import Kokoro
 import numpy as np
@@ -62,8 +66,39 @@ def emit(message):
     print(json.dumps(message, separators=(",", ":")), flush=True)
 
 
-def main():
-    directory = Path(__file__).resolve().parent
+MODEL_RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1"
+MODELS = {
+    "kokoro-v1.0.onnx": "beb0d1848dee9a49da392cc3df26958d46cfa35d321edf434f52949153f0df3a",
+    "voices-v1.0.bin": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+}
+
+
+def download_models(directory):
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, expected in MODELS.items():
+        target = directory / name
+        if target.is_file():
+            with target.open("rb") as existing:
+                if hashlib.file_digest(existing, "sha256").hexdigest() == expected:
+                    continue
+        temporary = None
+        try:
+            with NamedTemporaryFile(dir=directory, delete=False) as output:
+                temporary = Path(output.name)
+                digest = hashlib.sha256()
+                with urlopen(f"{MODEL_RELEASE}/{name}", timeout=60) as response:
+                    for chunk in iter(lambda: response.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                        output.write(chunk)
+            if digest.hexdigest() != expected:
+                raise ValueError(f"Checksum mismatch for {name}")
+            temporary.replace(target)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+
+def main(directory):
     ort.disable_telemetry_events()
     options = ort.SessionOptions()
     options.intra_op_num_threads = min(6, os.cpu_count() or 1)
@@ -98,4 +133,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    options = parser.add_mutually_exclusive_group()
+    options.add_argument("--download-models", type=Path)
+    options.add_argument("--model-dir", type=Path, default=Path(__file__).resolve().parent)
+    arguments = parser.parse_args()
+    if arguments.download_models is not None:
+        try:
+            download_models(arguments.download_models)
+        except (OSError, ValueError) as error:
+            sys.exit(f"Could not download Kokoro voice files: {error}")
+    else:
+        main(arguments.model_dir)

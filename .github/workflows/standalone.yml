@@ -1,0 +1,115 @@
+name: Standalone desktop packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [standalone-desktop]
+
+permissions:
+  contents: read
+
+jobs:
+  debian:
+    runs-on: ubuntu-latest
+    container: debian:13
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git g++ make jq python3-venv             qmake6 qt6-base-dev qt6-declarative-dev qt6-multimedia-dev binutils
+      - uses: actions/checkout@v4
+      - name: Build player
+        run: |
+          mkdir -p build/standalone
+          cd build/standalone
+          qmake6 ../../read-aloud.pro CONFIG+=standalone
+          make -j2
+      - name: Bundle Kokoro runtime
+        run: |
+          python3 -m venv build/worker-venv
+          build/worker-venv/bin/pip install -r packaging/worker-requirements.txt
+          build/worker-venv/bin/pyinstaller --noconfirm --onedir --name bvos-speech             --collect-all espeakng_loader --collect-data certifi speech/read-aloud.py
+          dist/bvos-speech/bvos-speech --help
+      - name: Package and test
+        run: |
+          bash packaging/debian.sh
+          apt-get install -y artifacts/*.deb
+          QT_QPA_PLATFORM=offscreen bvos-read-aloud --version
+          status=0
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software timeout 3s bvos-read-aloud --text "Debian runtime test." > startup.log 2>&1 || status=$?
+          cat startup.log
+          test "$status" = 124
+          if grep -Eq "module .* is not installed|failed to load|ReferenceError" startup.log; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debian-13-amd64
+          path: artifacts/*.deb
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          modules: qtmultimedia
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build and package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          New-Item -ItemType Directory -Force build/standalone, build/windows-package | Out-Null
+          Push-Location build/standalone
+          qmake ../../read-aloud.pro CONFIG+=standalone
+          nmake
+          Pop-Location
+          $package = 'build/windows-package'
+          Copy-Item build/standalone/release/bvos-read-aloud.exe $package/
+          windeployqt --release --qmldir src "$package/bvos-read-aloud.exe"
+          python -m pip install -r packaging/worker-requirements.txt
+          python -m PyInstaller --noconfirm --onedir --name bvos-speech --collect-all espeakng_loader --collect-data certifi speech/read-aloud.py
+          & dist/bvos-speech/bvos-speech.exe --help
+          Copy-Item dist/bvos-speech "$package/speech-worker" -Recurse
+          $env:BVOS_VERSION = (Get-Content manifest.json | ConvertFrom-Json).version
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc packaging/windows.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-11-x64
+          path: artifacts/*.exe
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          modules: qtmultimedia
+      - name: Build and package unsigned development image
+        run: |
+          mkdir -p build/standalone artifacts
+          (cd build/standalone; qmake ../../read-aloud.pro CONFIG+=standalone; make -j3)
+          app=build/standalone/bvos-read-aloud.app
+          macdeployqt "$app" -qmldir=src
+          python -m pip install -r packaging/worker-requirements.txt
+          python -m PyInstaller --noconfirm --onedir --name bvos-speech --collect-all espeakng_loader --collect-data certifi speech/read-aloud.py
+          dist/bvos-speech/bvos-speech --help
+          mkdir -p "$app/Contents/Frameworks/speech-worker"
+          ditto dist/bvos-speech "$app/Contents/Frameworks/speech-worker"
+          codesign --force --deep --sign - "$app"
+          "$app/Contents/MacOS/bvos-read-aloud" --version
+          version=$(jq -er '.version' manifest.json)
+          hdiutil create -volname "BvOs Read Aloud" -srcfolder "$app" -ov -format UDZO "artifacts/bvos-read-aloud-$version-macos-$(uname -m).dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-development
+          path: artifacts/*.dmg

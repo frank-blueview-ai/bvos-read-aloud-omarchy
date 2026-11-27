@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=BvOs Intelligence Read Aloud
+Comment=Read text aloud with the local Kokoro voice
+Exec=bvos-read-aloud
+Icon=bvos-read-aloud
+Terminal=false
+Categories=Accessibility;Utility;

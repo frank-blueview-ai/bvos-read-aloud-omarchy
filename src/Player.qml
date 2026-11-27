@@ -5,19 +5,22 @@ import QtQuick.Layouts
 Window {
     id: card
     title: qsTr("BvOs Intelligence Read Aloud")
-    width: 242
-    height: compactHeight
-    flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    readonly property bool standalone: standalonePlayer
+    width: standalone ? 840 : 242
+    height: standalone ? 600 : compactHeight
+    minimumWidth: standalone ? 400 : 0
+    minimumHeight: standalone ? 260 : 0
+    flags: standalone ? Qt.Window : Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     color: "transparent"
-    property bool expanded: false
+    property bool expanded: standalone
     property bool editingPreview: false
     readonly property bool fullscreen: visibility === Window.FullScreen
     readonly property int compactHeight: expanded ? (reader.hasPreview ? 203 : 67) : 32
-    readonly property int surfaceHeight: fullscreen ? height : compactHeight
-    readonly property int cornerRadius: fullscreen ? 0 : Math.min(reader.rounding, Math.floor(surfaceHeight / 2))
+    readonly property int surfaceHeight: fullscreen || standalone ? height : compactHeight
+    readonly property int cornerRadius: fullscreen || standalone ? 0 : Math.min(reader.rounding, Math.floor(surfaceHeight / 2))
     onCompactHeightChanged: {
         updateInputArea()
-        if (visible && !fullscreen)
+        if (visible && !fullscreen && !standalone)
             reader.resizeCard(242, compactHeight)
     }
     onCornerRadiusChanged: updateInputArea()
@@ -25,17 +28,17 @@ Window {
     onWidthChanged: if (fullscreen) updateInputArea()
     onFullscreenChanged: {
         collapse.stop()
-        if (!fullscreen && !hover.hovered)
+        if (!standalone && !fullscreen && !hover.hovered)
             collapse.restart()
         Qt.callLater(passagePreview.followHighlight)
     }
     onVisibleChanged: updateInputArea()
 
     function updateInputArea() {
-        if (visible)
+        if (visible && !standalone)
             reader.setCardInputArea(card, surfaceHeight, cornerRadius)
     }
-    readonly property int passageSideMargin: fullscreen ? 24 : 10
+    readonly property int passageSideMargin: fullscreen || standalone ? 24 : 10
     readonly property color ink: reader.dark ? "#eef3fb" : "#0f2a44"
     readonly property color muted: reader.dark ? "#b6c3d4" : "#4a6079"
     readonly property color subtle: reader.dark ? "#a3b1c3" : "#5a6f86"
@@ -48,11 +51,21 @@ Window {
         onTriggered: if (!card.fullscreen && !hover.hovered && !headerDrag.active) card.expanded = false
     }
 
+    function toggleFullscreen() {
+        if (!standalone)
+            reader.setCardFullscreen(!fullscreen)
+        else if (fullscreen)
+            showNormal()
+        else
+            showFullScreen()
+    }
+
     Shortcut {
         sequence: "Escape"
+        enabled: !card.standalone || card.fullscreen
         onActivated: {
             if (card.fullscreen)
-                reader.setCardFullscreen(false)
+                card.toggleFullscreen()
             else
                 card.close()
         }
@@ -110,8 +123,7 @@ Window {
                 height: 16
                 scale: 0.85
                 readonly property string shape: control.symbol
-                readonly property int passageSideMargin: fullscreen ? 24 : 10
-    readonly property color ink: !control.enabled ? Qt.alpha(card.subtle, 0.48)
+                readonly property color ink: !control.enabled ? Qt.alpha(card.subtle, 0.48)
                     : control.primary ? card.accent : card.ink
                 onShapeChanged: requestPaint()
                 onInkChanged: requestPaint()
@@ -161,6 +173,7 @@ Window {
 
         HoverHandler {
             id: hover
+            enabled: !card.standalone
             onHoveredChanged: {
                 if (hovered) {
                     collapse.stop()
@@ -289,7 +302,7 @@ Window {
                 visible: card.expanded
                 symbol: card.fullscreen ? "restore" : "fullscreen"
                 label: card.fullscreen ? qsTr("Exit fullscreen (Esc)") : qsTr("Fullscreen")
-                onClicked: reader.setCardFullscreen(!card.fullscreen)
+                onClicked: card.toggleFullscreen()
             }
 
             Button {
@@ -323,7 +336,7 @@ Window {
             DragHandler {
                 id: headerDrag
                 target: null
-                enabled: !card.fullscreen
+                enabled: !card.fullscreen && !card.standalone
                 acceptedButtons: Qt.LeftButton
                 cursorShape: active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 onActiveChanged: {
@@ -406,6 +419,28 @@ Window {
                 onClicked: card.close()
             }
         }
+        RowLayout {
+            anchors.top: parent.top
+            anchors.topMargin: 68
+            anchors.left: parent.left
+            anchors.leftMargin: card.passageSideMargin
+            visible: card.standalone
+
+            Button {
+                text: qsTr("Read Clipboard")
+                onClicked: reader.readClipboard()
+            }
+            Button {
+                text: qsTr("Paste Text…")
+                onClicked: pasteDialog.open()
+            }
+            Button {
+                text: qsTr("Set Up Kokoro Voice")
+                visible: reader.voiceSetupAvailable
+                onClicked: voiceDialog.open()
+            }
+        }
+
         Button {
             id: highlightMode
             anchors.top: previewMode.top
@@ -413,7 +448,7 @@ Window {
             anchors.rightMargin: 10
             height: previewMode.height
             padding: 4
-            visible: card.fullscreen && reader.hasPreview && !card.editingPreview
+            visible: (card.fullscreen || card.standalone) && reader.hasPreview && !card.editingPreview
             focusPolicy: Qt.NoFocus
             text: [qsTr("Word"), qsTr("Sentence"), qsTr("Paragraph")][reader.highlightMode]
             Accessible.name: qsTr("Highlight mode: %1. Activate to switch.").arg(text)
@@ -431,7 +466,7 @@ Window {
         Button {
             id: previewMode
             anchors.top: parent.top
-            anchors.topMargin: 64
+            anchors.topMargin: card.standalone ? 110 : 64
             anchors.right: parent.right
             anchors.rightMargin: card.passageSideMargin
             height: 21
@@ -465,7 +500,7 @@ Window {
             anchors.leftMargin: card.passageSideMargin
             anchors.rightMargin: card.passageSideMargin
             anchors.bottomMargin: card.fullscreen ? 24 : 10
-            anchors.topMargin: 87
+            anchors.topMargin: card.standalone ? 136 : 87
             visible: card.expanded && reader.hasPreview
             clip: true
             contentWidth: availableWidth
@@ -546,4 +581,42 @@ Window {
             }
         }
     }
+
+    Dialog {
+        id: pasteDialog
+        anchors.centerIn: parent
+        width: Math.min(card.width - 32, 580)
+        title: qsTr("Paste text to read")
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onOpened: {
+            pastedText.clear()
+            pastedText.forceActiveFocus()
+        }
+        onAccepted: reader.readText(pastedText.text)
+        contentItem: ScrollView {
+            implicitHeight: 220
+            TextArea {
+                id: pastedText
+                textFormat: TextEdit.PlainText
+                wrapMode: TextEdit.Wrap
+                placeholderText: qsTr("Paste or type a passage")
+            }
+        }
+    }
+
+    Dialog {
+        id: voiceDialog
+        anchors.centerIn: parent
+        width: Math.min(card.width - 32, 440)
+        title: qsTr("Download the Kokoro voice")
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        contentItem: Label {
+            text: qsTr("Download about 354 MB of voice files. Read Aloud can work offline once the download finishes.")
+            wrapMode: Text.WordWrap
+        }
+        onAccepted: reader.setupVoice()
+    }
+
 }
