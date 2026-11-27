@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import ssl
 from pathlib import Path
 import sys
 from base64 import b64encode
@@ -74,6 +75,9 @@ MODELS = {
 
 
 def download_models(directory):
+    import certifi
+
+    context = ssl.create_default_context(cafile=certifi.where())
     directory.mkdir(parents=True, exist_ok=True)
     for name, expected in MODELS.items():
         target = directory / name
@@ -86,7 +90,7 @@ def download_models(directory):
             with NamedTemporaryFile(dir=directory, delete=False) as output:
                 temporary = Path(output.name)
                 digest = hashlib.sha256()
-                with urlopen(f"{MODEL_RELEASE}/{name}", timeout=60) as response:
+                with urlopen(f"{MODEL_RELEASE}/{name}", timeout=60, context=context) as response:
                     for chunk in iter(lambda: response.read(1024 * 1024), b""):
                         digest.update(chunk)
                         output.write(chunk)

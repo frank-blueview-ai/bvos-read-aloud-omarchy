@@ -16,7 +16,8 @@ jobs:
       - name: Install build tools
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git g++ make jq python3-venv             qmake6 qt6-base-dev qt6-declarative-dev qt6-multimedia-dev binutils
+          apt-get install -y --no-install-recommends ca-certificates git g++ make jq python3-venv libpython3.13 \
+            qmake6 qt6-base-dev qt6-declarative-dev qt6-multimedia-dev binutils
       - uses: actions/checkout@v4
       - name: Build player
         run: |
@@ -28,12 +29,13 @@ jobs:
         run: |
           python3 -m venv build/worker-venv
           build/worker-venv/bin/pip install -r packaging/worker-requirements.txt
-          build/worker-venv/bin/pyinstaller --noconfirm --onedir --name bvos-speech             --collect-all espeakng_loader --collect-data certifi speech/read-aloud.py
+          build/worker-venv/bin/pyinstaller --noconfirm --onedir --name bvos-speech \
+            --collect-all espeakng_loader --collect-data certifi --collect-data kokoro_onnx speech/read-aloud.py
           dist/bvos-speech/bvos-speech --help
       - name: Package and test
         run: |
           bash packaging/debian.sh
-          apt-get install -y artifacts/*.deb
+          apt-get install -y ./artifacts/*.deb
           QT_QPA_PLATFORM=offscreen bvos-read-aloud --version
           status=0
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software timeout 3s bvos-read-aloud --text "Debian runtime test." > startup.log 2>&1 || status=$?
@@ -72,7 +74,7 @@ jobs:
           Copy-Item build/standalone/release/bvos-read-aloud.exe $package/
           windeployqt --release --qmldir src "$package/bvos-read-aloud.exe"
           python -m pip install -r packaging/worker-requirements.txt
-          python -m PyInstaller --noconfirm --onedir --name bvos-speech --collect-all espeakng_loader --collect-data certifi speech/read-aloud.py
+          python -m PyInstaller --noconfirm --onedir --name bvos-speech --collect-all espeakng_loader --collect-data certifi --collect-data kokoro_onnx speech/read-aloud.py
           & dist/bvos-speech/bvos-speech.exe --help
           Copy-Item dist/bvos-speech "$package/speech-worker" -Recurse
           $env:BVOS_VERSION = (Get-Content manifest.json | ConvertFrom-Json).version
@@ -101,7 +103,7 @@ jobs:
           app=build/standalone/bvos-read-aloud.app
           macdeployqt "$app" -qmldir=src
           python -m pip install -r packaging/worker-requirements.txt
-          python -m PyInstaller --noconfirm --onedir --name bvos-speech --collect-all espeakng_loader --collect-data certifi speech/read-aloud.py
+          python -m PyInstaller --noconfirm --onedir --name bvos-speech --collect-all espeakng_loader --collect-data certifi --collect-data kokoro_onnx speech/read-aloud.py
           dist/bvos-speech/bvos-speech --help
           mkdir -p "$app/Contents/Frameworks/speech-worker"
           ditto dist/bvos-speech "$app/Contents/Frameworks/speech-worker"
