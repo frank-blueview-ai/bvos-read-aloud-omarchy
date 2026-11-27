@@ -11,4 +11,4 @@ struct SpokenSentence {
 
 QList<SpokenSentence> spokenSentences(const QString &source);
 int previewPosition(const QString &source, int position);
-QString formattedPassage(const QString &source, const SpokenSentence *highlight, bool dark);
+QString formattedPassage(const QString &source, const SpokenSentence *highlight, bool dark, bool fullscreen = false);

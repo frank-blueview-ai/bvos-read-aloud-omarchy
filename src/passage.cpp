@@ -87,14 +87,28 @@ int previewPosition(const QString &source, int position) {
     return adjusted;
 }
 
-QString formattedPassage(const QString &source, const SpokenSentence *highlight, bool dark) {
+QString formattedPassage(const QString &source, const SpokenSentence *highlight, bool dark, bool fullscreen) {
     if (source.trimmed().isEmpty())
         return {};
     QTextDocument document;
     QFont font = document.defaultFont();
-    font.setPixelSize(12);
+    font.setPixelSize(fullscreen ? 21 : 12);
+    if (fullscreen) {
+        font.setFamilies({"Noto Serif", "serif"});
+        font.setStyleHint(QFont::Serif);
+    }
     document.setDefaultFont(font);
     parse(document, source);
+    if (fullscreen) {
+        for (auto block = document.begin(); block.isValid(); block = block.next()) {
+            auto format = block.blockFormat();
+            const bool heading = format.headingLevel() > 0;
+            format.setLineHeight(150, QTextBlockFormat::ProportionalHeight);
+            format.setTopMargin(heading && block != document.begin() ? 20 : 0);
+            format.setBottomMargin(heading ? 10 : 16);
+            QTextCursor(block).setBlockFormat(format);
+        }
+    }
     if (highlight) {
         QTextCursor cursor(&document);
         cursor.setPosition(highlight->start);

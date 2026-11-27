@@ -480,11 +480,11 @@ Window {
                     height: contentHeight
                     visible: !card.editingPreview
                     width: previewFlick.width - 8
-                    text: card.editingPreview ? "" : reader.formattedPreview
+                    text: card.editingPreview ? "" : card.fullscreen ? reader.fullscreenPreview : reader.formattedPreview
                     textFormat: TextEdit.RichText
                     wrapMode: TextEdit.Wrap
                     color: card.ink
-                    font.pixelSize: card.fullscreen ? 19 : 12
+                    font.pixelSize: card.fullscreen ? 21 : 12
                 }
 
                 TextArea {
@@ -499,7 +499,7 @@ Window {
                     selectionColor: card.accent
                     selectedTextColor: reader.dark ? "#0f1724" : "#ffffff"
                     padding: 3
-                    font.pixelSize: card.fullscreen ? 19 : 12
+                    font.pixelSize: card.fullscreen ? 21 : 12
                     background: null
                     onTextChanged: if (activeFocus && text !== reader.preview) reader.editPreview(text)
                     onCursorRectangleChanged: {

@@ -81,6 +81,7 @@ class Reader final : public QObject {
     Q_PROPERTY(QString preview READ preview NOTIFY previewChanged)
     Q_PROPERTY(int highlightPosition READ highlightPosition NOTIFY formattedPreviewChanged)
     Q_PROPERTY(QString formattedPreview READ formattedPreview NOTIFY formattedPreviewChanged)
+    Q_PROPERTY(QString fullscreenPreview READ fullscreenPreview NOTIFY formattedPreviewChanged)
     Q_PROPERTY(bool hasPreview READ hasPreview NOTIFY previewChanged)
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(bool playable READ playable NOTIFY changed)
@@ -178,9 +179,8 @@ public:
     int highlightPosition() const {
         return highlightIndex < 0 ? -1 : previewPosition(previewText, passages.at(highlightIndex).start);
     }
-    QString formattedPreview() const {
-        return formattedPassage(previewText, highlightIndex >= 0 ? &passages.at(highlightIndex) : nullptr, darkTheme);
-    }
+    QString formattedPreview() const { return previewHtml(false); }
+    QString fullscreenPreview() const { return previewHtml(true); }
     bool hasPreview() const { return editedPreview || !previewText.isEmpty(); }
 
     QString status() const {
@@ -346,6 +346,11 @@ signals:
     void appearanceChanged();
 
 private:
+    QString previewHtml(bool fullscreen) const {
+        const auto *highlight = highlightIndex >= 0 ? &passages.at(highlightIndex) : nullptr;
+        return formattedPassage(previewText, highlight, darkTheme, fullscreen);
+    }
+
     void load(const QString &text, bool play) {
         if (text.trimmed().isEmpty() && playable())
             return;
